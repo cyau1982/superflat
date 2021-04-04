@@ -1,0 +1,2 @@
+# superflat
+SuperFlat PixInsight module
