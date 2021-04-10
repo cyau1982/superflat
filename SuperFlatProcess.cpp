@@ -19,6 +19,7 @@ SuperFlatProcess::SuperFlatProcess()
 
     // Instantiate process parameters
     new SFSkyDetectionThreshold(this);
+    new SFStarDetectionSensitivity(this);
     new SFObjectDiffusionDistance(this);
     new SFSmoothness(this);
     new SFGenerateSkyMask(this);

@@ -98,6 +98,7 @@ bool SuperFlatInterface::ImportProcess(const ProcessImplementation& p)
 void SuperFlatInterface::UpdateControls()
 {
 	GUI->SkyDetectionThreshold_NumericControl.SetValue(instance.skyDetectionThreshold);
+	GUI->StarDetectionSensitivity_NumericControl.SetValue(instance.starDetectionSensitivity);
 	GUI->ObjectDiffusionDistance_NumericControl.SetValue(instance.objectDiffusionDistance);
 	GUI->NonSkyMaskView_Edit.SetText(NONSKY_MASK_ID);
 	GUI->Smoothness_NumericControl.SetValue(instance.smoothness);
@@ -145,6 +146,8 @@ void SuperFlatInterface::__EditValueUpdated(NumericEdit& sender, double value)
 {
 	if (sender == GUI->SkyDetectionThreshold_NumericControl)
 		instance.skyDetectionThreshold = value;
+	else if (sender == GUI->StarDetectionSensitivity_NumericControl)
+		instance.starDetectionSensitivity = value;
 	else if (sender == GUI->ObjectDiffusionDistance_NumericControl)
 		instance.objectDiffusionDistance = value;
 	else if (sender == GUI->Smoothness_NumericControl)
@@ -184,7 +187,7 @@ void SuperFlatInterface::__ViewDrop(Control& sender, const Point& pos, const Vie
 SuperFlatInterface::GUIData::GUIData(SuperFlatInterface& w)
 {
 	pcl::Font fnt = w.Font();
-	int labelWidth1 = fnt.Width(String("Object diffusion distance:") + 'T');
+	int labelWidth1 = fnt.Width(String("Star detection sensitivity:") + 'T');
 	int editWidth1 = fnt.Width(String('0', 12));
 	int ui4 = w.LogicalPixelsToPhysical(4);
 
@@ -198,19 +201,33 @@ SuperFlatInterface::GUIData::GUIData(SuperFlatInterface& w)
 	SkyDetectionThreshold_NumericControl.edit.SetFixedWidth(editWidth1);
 	SkyDetectionThreshold_NumericControl.SetToolTip("<p>This value describes the threshold when comparing the brightness of each pixel to its neighbor area. "
 		                                            "If the difference is greater than this threshold, the pixel will not be considered as a part of the sky. "
-		                                            "Larger threshold will result in including some dim stars or nebula into sky detection.</p>");
+		                                            "Larger threshold will result in including some faint stars or nebula into sky detection.</p>");
 	SkyDetectionThreshold_NumericControl.OnValueUpdated((NumericEdit::value_event_handler) & SuperFlatInterface::__EditValueUpdated, w);
 	SkyDetectionThreshold_Sizer.SetSpacing(4);
 	SkyDetectionThreshold_Sizer.Add(SkyDetectionThreshold_NumericControl);
 	SkyDetectionThreshold_Sizer.AddStretch();
 
+	StarDetectionSensitivity_NumericControl.label.SetText("Star detection sensitivity:");
+	StarDetectionSensitivity_NumericControl.label.SetFixedWidth(labelWidth1);
+	StarDetectionSensitivity_NumericControl.slider.SetRange(0, 600);
+	StarDetectionSensitivity_NumericControl.slider.SetScaledMinWidth(300);
+	StarDetectionSensitivity_NumericControl.SetReal();
+	StarDetectionSensitivity_NumericControl.SetRange(TheSFStarDetectionSensitivityParameter->MinimumValue(), TheSFStarDetectionSensitivityParameter->MaximumValue());
+	StarDetectionSensitivity_NumericControl.SetPrecision(TheSFStarDetectionSensitivityParameter->Precision());
+	StarDetectionSensitivity_NumericControl.edit.SetFixedWidth(editWidth1);
+	StarDetectionSensitivity_NumericControl.SetToolTip("<p>This value describes the star detection sensitivity. "
+		"Increasing sensitivity allows identifying fainter stars, at the risk of identifying noise as stars.</p>");
+	StarDetectionSensitivity_NumericControl.OnValueUpdated((NumericEdit::value_event_handler) & SuperFlatInterface::__EditValueUpdated, w);
+	StarDetectionSensitivity_Sizer.SetSpacing(4);
+	StarDetectionSensitivity_Sizer.Add(StarDetectionSensitivity_NumericControl);
+	StarDetectionSensitivity_Sizer.AddStretch();
+
 	ObjectDiffusionDistance_NumericControl.label.SetText("Object diffusion distance:");
 	ObjectDiffusionDistance_NumericControl.label.SetFixedWidth(labelWidth1);
 	ObjectDiffusionDistance_NumericControl.slider.SetRange(0, 1000);
 	ObjectDiffusionDistance_NumericControl.slider.SetScaledMinWidth(300);
-	ObjectDiffusionDistance_NumericControl.SetReal();
+	ObjectDiffusionDistance_NumericControl.SetInteger();
 	ObjectDiffusionDistance_NumericControl.SetRange(TheSFObjectDiffusionDistanceParameter->MinimumValue(), TheSFObjectDiffusionDistanceParameter->MaximumValue());
-	ObjectDiffusionDistance_NumericControl.SetPrecision(TheSFObjectDiffusionDistanceParameter->Precision());
 	ObjectDiffusionDistance_NumericControl.edit.SetFixedWidth(editWidth1);
 	ObjectDiffusionDistance_NumericControl.SetToolTip("<p>After a non-sky mask is generated in sky detection, the mask will be diffused in order to protect the edges "
 		                                              "and flares of stars or deep sky objects. This value describes the distance of the diffusion.</p>");
@@ -241,8 +258,8 @@ SuperFlatInterface::GUIData::GUIData(SuperFlatInterface& w)
 	Smoothness_NumericControl.slider.SetRange(0, 1000);
 	Smoothness_NumericControl.slider.SetScaledMinWidth(300);
 	Smoothness_NumericControl.SetReal();
-	Smoothness_NumericControl.SetRange(TheSFObjectDiffusionDistanceParameter->MinimumValue(), TheSFObjectDiffusionDistanceParameter->MaximumValue());
-	Smoothness_NumericControl.SetPrecision(TheSFObjectDiffusionDistanceParameter->Precision());
+	Smoothness_NumericControl.SetRange(TheSFSmoothnessParameter->MinimumValue(), TheSFSmoothnessParameter->MaximumValue());
+	Smoothness_NumericControl.SetPrecision(TheSFSmoothnessParameter->Precision());
 	Smoothness_NumericControl.edit.SetFixedWidth(editWidth1);
 	Smoothness_NumericControl.SetToolTip("<p>Smoothness of flat generation.</p>");
 	Smoothness_NumericControl.OnValueUpdated((NumericEdit::value_event_handler) & SuperFlatInterface::__EditValueUpdated, w);
@@ -260,6 +277,7 @@ SuperFlatInterface::GUIData::GUIData(SuperFlatInterface& w)
 	Global_Sizer.SetMargin(8);
 	Global_Sizer.SetSpacing(4);
 	Global_Sizer.Add(SkyDetectionThreshold_Sizer);
+	Global_Sizer.Add(StarDetectionSensitivity_Sizer);
 	Global_Sizer.Add(ObjectDiffusionDistance_Sizer);
 	Global_Sizer.Add(NonSkyMaskView_Sizer);
 	Global_Sizer.Add(Smoothness_NumericControl);

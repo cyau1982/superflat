@@ -41,6 +41,8 @@ private:
         VerticalSizer   Global_Sizer;
             HorizontalSizer SkyDetectionThreshold_Sizer;
                 NumericControl  SkyDetectionThreshold_NumericControl;
+            HorizontalSizer StarDetectionSensitivity_Sizer;
+                NumericControl  StarDetectionSensitivity_NumericControl;
             HorizontalSizer ObjectDiffusionDistance_Sizer;
                 NumericControl  ObjectDiffusionDistance_NumericControl;
             HorizontalSizer NonSkyMaskView_Sizer;

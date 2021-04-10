@@ -4,6 +4,7 @@ namespace pcl
 {
 
 SFSkyDetectionThreshold* TheSFSkyDetectionThresholdParameter = nullptr;
+SFStarDetectionSensitivity* TheSFStarDetectionSensitivityParameter = nullptr;
 SFObjectDiffusionDistance* TheSFObjectDiffusionDistanceParameter = nullptr;
 SFSmoothness* TheSFSmoothnessParameter = nullptr;
 SFGenerateSkyMask* TheSFGenerateSkyMask = nullptr;
@@ -38,7 +39,37 @@ double SFSkyDetectionThreshold::DefaultValue() const
     return 0.0001;
 }
 
-SFObjectDiffusionDistance::SFObjectDiffusionDistance(MetaProcess* P) : MetaFloat(P)
+SFStarDetectionSensitivity::SFStarDetectionSensitivity(MetaProcess* P) : MetaFloat(P)
+{
+    TheSFStarDetectionSensitivityParameter = this;
+}
+
+IsoString SFStarDetectionSensitivity::Id() const
+{
+    return "starDetectionSensitivity";
+}
+
+int SFStarDetectionSensitivity::Precision() const
+{
+    return 2;
+}
+
+double SFStarDetectionSensitivity::MinimumValue() const
+{
+    return 0.0;
+}
+
+double SFStarDetectionSensitivity::MaximumValue() const
+{
+    return 6.0;
+}
+
+double SFStarDetectionSensitivity::DefaultValue() const
+{
+    return 4.0;
+}
+
+SFObjectDiffusionDistance::SFObjectDiffusionDistance(MetaProcess* P) : MetaInt8(P)
 {
     TheSFObjectDiffusionDistanceParameter = this;
 }
@@ -46,11 +77,6 @@ SFObjectDiffusionDistance::SFObjectDiffusionDistance(MetaProcess* P) : MetaFloat
 IsoString SFObjectDiffusionDistance::Id() const
 {
     return "objectDiffusionDistance";
-}
-
-int SFObjectDiffusionDistance::Precision() const
-{
-    return 2;
 }
 
 double SFObjectDiffusionDistance::MinimumValue() const
@@ -65,7 +91,7 @@ double SFObjectDiffusionDistance::MaximumValue() const
 
 double SFObjectDiffusionDistance::DefaultValue() const
 {
-    return 1.0;
+    return 5.0;
 }
 
 SFSmoothness::SFSmoothness(MetaProcess* P) : MetaFloat(P)

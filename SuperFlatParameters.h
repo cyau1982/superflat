@@ -22,13 +22,26 @@ public:
 
 extern SFSkyDetectionThreshold* TheSFSkyDetectionThresholdParameter;
 
-class SFObjectDiffusionDistance : public MetaFloat
+class SFStarDetectionSensitivity : public MetaFloat
+{
+public:
+    SFStarDetectionSensitivity(MetaProcess*);
+
+    IsoString Id() const override;
+    int Precision() const override;
+    double MinimumValue() const override;
+    double MaximumValue() const override;
+    double DefaultValue() const override;
+};
+
+extern SFStarDetectionSensitivity* TheSFStarDetectionSensitivityParameter;
+
+class SFObjectDiffusionDistance : public MetaInt8
 {
 public:
     SFObjectDiffusionDistance(MetaProcess*);
 
     IsoString Id() const override;
-    int Precision() const override;
     double MinimumValue() const override;
     double MaximumValue() const override;
     double DefaultValue() const override;
