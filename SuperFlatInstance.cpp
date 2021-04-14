@@ -1,3 +1,4 @@
+#include <random>
 #include <pcl/AutoViewLock.h>
 #include <pcl/Console.h>
 #include <pcl/FFTConvolution.h>
@@ -262,80 +263,29 @@ bool SuperFlatInstance::ExecuteOn(View& view)
     image.Status().Complete();
 
     // Step 7: Inpaint
-    // Step 7.1: Gaussian pyramid
-    ReferenceArray<ImageVariant> pyramid;
-    ReferenceArray<ImageVariant> pyramidWeight;
-    ImageVariant* lastImg = &flat;
-    int w = flat.Width();
-    int h = flat.Height();
-    int it = 0;
-    image.Status().Initialize("Inpainting", pcl::Log2(pcl::Min(w, h)) + 1);
-    while ((w > 0) && (h > 0)) {
-        ImageVariant* conv = new ImageVariant;
-        ImageVariant* weight = new ImageVariant;
-        if (it++ == 0) {
-            conv->CopyImage(flat);
-            conv->EnsureUniqueImage();
-            weight->CopyImage(mask);
-            weight->EnsureUniqueImage();
-        } else {
-            conv->CreateImageAs(flat);
-            conv->AllocateImage(w, h, flat.NumberOfChannels(), flat.ColorSpace());
-            weight->CreateImageAs(flat);
-            weight->AllocateImage(w, h, flat.NumberOfChannels(), flat.ColorSpace());
-            if (image.BitsPerSample() == 32) {
-                ReferenceArray<GenericImage<FloatPixelTraits>> input;
-                input << &static_cast<Image&>(**lastImg);
-                for (int c = 0; c < image.NumberOfChannels(); c++) {
-                    SuperFlatThread<FloatPixelTraits>::dispatch(gconv<FloatPixelTraits>, this, input, static_cast<Image&>(**conv), c);
-                    SuperFlatThread<FloatPixelTraits>::dispatch(calcWeight<FloatPixelTraits>, this, input, static_cast<Image&>(**weight), c);
-                }
-            } else if (image.BitsPerSample() == 64) {
-                ReferenceArray<GenericImage<DoublePixelTraits>> input;
-                input << &static_cast<DImage&>(**lastImg);
-                for (int c = 0; c < image.NumberOfChannels(); c++) {
-                    SuperFlatThread<DoublePixelTraits>::dispatch(gconv<DoublePixelTraits>, this, input, static_cast<DImage&>(**conv), c);
-                    SuperFlatThread<DoublePixelTraits>::dispatch(calcWeight<DoublePixelTraits>, this, input, static_cast<DImage&>(**conv), c);
-                }
-            }
+    image.Status().Initialize("Inpainting", image.NumberOfChannels() + 1);
+    ImageVariant flat0;
+    flat0.CopyImage(flat);
+    flat0.EnsureUniqueImage();
+    flat0.SetStatusCallback(nullptr);
+    image.Status() += 1;
+    image.Status().SetRefreshRate();
+    if (image.BitsPerSample() == 32) {
+        ReferenceArray<GenericImage<FloatPixelTraits>> input;
+        input << &static_cast<Image&>(*flat0);
+        for (int c = 0; c < image.NumberOfChannels(); c++) {
+            SuperFlatThread<FloatPixelTraits>::dispatch(inpaint<FloatPixelTraits>, this, input, static_cast<Image&>(*flat), c);
+            image.Status() += 1;
         }
-        pyramid << conv;
-        pyramidWeight << weight;
-        lastImg = conv;
-        w /= 2;
-        h /= 2;
-        image.Status() += 1;
+    } else if (image.BitsPerSample() == 64) {
+        ReferenceArray<GenericImage<DoublePixelTraits>> input;
+        input << &static_cast<DImage&>(*flat0);
+        for (int c = 0; c < image.NumberOfChannels(); c++) {
+            SuperFlatThread<DoublePixelTraits>::dispatch(inpaint<DoublePixelTraits>, this, input, static_cast<DImage&>(*flat), c);
+            image.Status() += 1;
+        }
     }
     image.Status().Complete();
-
-    // Step 7.2: Reconstruct
-    if (image.BitsPerSample() == 32) {
-        ReferenceArray<GenericImage<FloatPixelTraits>> inputs;
-        for (int i = 0; i < pyramid.Length(); i++) {
-            BicubicFilterPixelInterpolation bs(2, 2, CubicBSplineFilter());
-            Resample rs(bs, flat.Width() / pyramid[i].Width(), flat.Height() / pyramid[i].Height());
-            rs >> pyramid[i];
-            rs >> pyramidWeight[i];
-            inputs << &static_cast<Image&>(*pyramid[i]);
-            inputs << &static_cast<Image&>(*pyramidWeight[i]);
-        }
-        for (int c = 0; c < image.NumberOfChannels(); c++)
-            SuperFlatThread<FloatPixelTraits>::dispatch(inpaint<FloatPixelTraits>, this, inputs, static_cast<Image&>(*flat), c);
-    } else if (image.BitsPerSample() == 64) {
-        ReferenceArray<GenericImage<DoublePixelTraits>> inputs;
-        for (int i = 0; i < pyramid.Length(); i++) {
-            BicubicFilterPixelInterpolation bs(2, 2, CubicBSplineFilter());
-            Resample rs(bs, flat.Width() / pyramid[i].Width(), flat.Height() / pyramid[i].Height());
-            rs >> pyramid[i];
-            rs >> pyramidWeight[i];
-            inputs << &static_cast<DImage&>(*pyramid[i]);
-            inputs << &static_cast<DImage&>(*pyramidWeight[i]);
-        }
-        for (int c = 0; c < image.NumberOfChannels(); c++)
-            SuperFlatThread<DoublePixelTraits>::dispatch(inpaint<DoublePixelTraits>, this, inputs, static_cast<DImage&>(*flat), c);
-    }
-
-    pyramid.Destroy();
 
     // Step 8: Blur
     VariableShapeFilter H2(pcl::Pow(1.7f, smoothness), 5.0f, 0.01f, 1.0f, 0.0f);
@@ -398,106 +348,60 @@ void SuperFlatInstance::diffuse(SuperFlatInstance* superFlat, ReferenceArray<Gen
     }
 }
 
-template <class P>
-void SuperFlatInstance::gconv(SuperFlatInstance* superFlat, ReferenceArray<GenericImage<P>>& input, GenericImage<P>& conv, int y, int channel)
-{
-    typename P::sample* pOut = conv.ScanLine(y, channel);
-    const GenericImage<P>& in = input[0];
-    int w = in.Width(), h = in.Height();
-    float scaleX = w / conv.Width(), scaleY = h / conv.Height();
-
-    for (int x = 0; x < conv.Width(); x++) {
-        int ix = (x + 0.5f) * scaleX - 0.5f;
-        int iy = (y + 0.5f) * scaleY - 0.5f;
-        const int radius = 9;
-        const float r2 = radius * radius;
-        typename P::sample p = 0.0;
-        float w0 = 0.0f;
-        for (int dy = iy - radius; dy <= iy + radius; dy++) {
-            if ((dy < 0) || (dy >= h))
-                continue;
-            for (int dx = ix - radius; dx <= ix + radius; dx++) {
-                if ((dx < 0) || (dx >= w))
-                    continue;
-                float d2 = (dx - ix) * (dx - ix) + (dy - iy) * (dy - iy);
-                if (d2 > r2)
-                    continue;
-                float w = 1.0f - d2 / r2;
-                typename P::sample p0 = in(dx, dy, channel);
-                if ((p0 == 0.0) || pcl::IsNaN(p0))
-                    continue;
-                p += p0 * w;
-                w0 += w;
-            }
-        }
-        if (w0 > 0.0)
-            pOut[x] = p / w0;
-        else
-            pOut[x] = NAN;
-    }
-}
-
-template <class P>
-void SuperFlatInstance::calcWeight(SuperFlatInstance* superFlat, ReferenceArray<GenericImage<P>>& input, GenericImage<P>& weight, int y, int channel)
-{
-    typename P::sample* pOut = weight.ScanLine(y, channel);
-    const GenericImage<P>& in = input[0];
-    int w = in.Width(), h = in.Height();
-    float scaleX = w / weight.Width(), scaleY = h / weight.Height();
-
-    for (int x = 0; x < weight.Width(); x++) {
-        int ix = (x + 0.5f) * scaleX - 0.5f;
-        int iy = (y + 0.5f) * scaleY - 0.5f;
-        const int radius = 9;
-        const float r2 = radius * radius;
-        typename P::sample p = 0.0;
-        float w0 = 0.0f;
-        float wall = 0.0f;
-        for (int dy = iy - radius; dy <= iy + radius; dy++) {
-            if ((dy < 0) || (dy >= h))
-                continue;
-            for (int dx = ix - radius; dx <= ix + radius; dx++) {
-                if ((dx < 0) || (dx >= w))
-                    continue;
-                float d2 = (dx - ix) * (dx - ix) + (dy - iy) * (dy - iy);
-                if (d2 > r2)
-                    continue;
-                float w = 1.0f - d2 / r2;
-                wall += w;
-                typename P::sample p0 = in(dx, dy, channel);
-                if ((p0 == 0.0) || pcl::IsNaN(p0))
-                    continue;
-                w0 += w;
-            }
-        }
-        pOut[x] = w0 / wall;
-    }
-}
-
-template <class P>
+ template <class P>
 void SuperFlatInstance::inpaint(SuperFlatInstance* superFlat, ReferenceArray<GenericImage<P>>& inputs, GenericImage<P>& output, int y, int channel)
 {
     typename P::sample* pOut = output.ScanLine(y, channel);
+    GenericImage<P>& input = inputs[0];
+    const int n = 32;
+    const int distance = pcl::Max(output.Width(), output.Height());
+    std::minstd_rand rg(output.Height() * channel + y);
+    std::uniform_real_distribution<float> ud(-0.5f, 0.5f);
 
     for (int x = 0; x < output.Width(); x++) {
-        int s = 1;
-        float w0 = 0.0f;
-        typename P::sample p0 = 0.0;
-        float f = 1.0f;
-        for (int i = 0; i < inputs.Length(); i+= 2) {
-            typename P::sample p = inputs[i](x, y, channel);
-            typename P::sample w = inputs[i + 1](x, y, channel);
-            if (pcl::IsNaN(p)) {
-                p = 0.0;
-                w = 0.0;
-            }
-            p0 += p * w * f;
-            w0 += w * f;
-            f *= 0.25f;
-            if (w > 0.5)
-                break;
+        typename P::sample in = input(x, y, channel);
+        if (in > 0.0) {
+            pOut[x] = in;
+            continue;
         }
-        pOut[x] = p0 / w0;
+        typename P::sample p = 0.0;
+        float w0 = 0.0f;
+        for (int i = 0; i < n; i++) {
+            float rad = pcl::Pi() * 2.0f * i / n;
+            float step_x = pcl::Cos(rad);
+            float step_y = pcl::Sin(rad);
+            for (int j = 1; j < distance; j = (j < 16) ? j + 1 : j * 1.1f) {
+                if ((j < 64) && (i % 2 != 0))
+                    continue;
+                float w = 1.0f / float(j);
+                if (w < w0 * 0.01f)
+                    continue;
+                float rx = ud(rg) * j * 6.0f / n;
+                float ry = ud(rg) * j * 6.0f / n;
+                rx = 0.0;
+                ry = 0.0;
+                int ix = int(x + step_x * j + rx + 0.5f);
+                int iy = int(y + step_y * j + ry + 0.5f);
+                if (ix < 0)
+                    ix = 0;
+                else if (ix >= input.Width())
+                    ix = input.Width() - 1;
+                if (iy < 0)
+                    iy = 0;
+                else if (iy >= input.Height())
+                    iy = input.Height() - 1;
+                typename P::sample in = input(ix, iy, channel);
+                if (in == 0.0)
+                    continue;
+                p += in * w;
+                w0 += w;
+                break;
+            }
+        }
+        if (w0 > 0.0f)
+            pOut[x] = p / w0;
+        else
+            pOut[x] = 0.0;
     }
 }
 
