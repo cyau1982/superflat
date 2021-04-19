@@ -198,34 +198,28 @@ bool SuperFlatInstance::ExecuteOn(View& view)
 
     // Step 3: Create sky mask
     ImageVariant mask;
-    mask.CreateImageAs(image);
-    mask.AllocateImage(image.Width(), image.Height(), image.NumberOfChannels(), image.ColorSpace());
+    mask.CopyImage(image);
+    mask.EnsureUniqueImage();
     mask.SetStatusCallback(nullptr);
-    mask.One();
-    for (int i = -1; i < objectDiffusionDistance; i++) {
-        ImageVariant conv;
-        conv.CopyImage(image);
-        conv.EnsureUniqueImage();
-        conv.SetStatusCallback(nullptr);
-        if (i >= 0) {
-            float sigma = Pow2<float>(float(i));
-            VariableShapeFilter H(sigma, 5.0f, 0.01f, 1.0f, 0.0f);
-            FFTConvolution(H) >> conv;
-        }
-        if (image.BitsPerSample() == 32) {
-            ReferenceArray<GenericImage<FloatPixelTraits>> input;
-            input << &static_cast<Image&>(*ref);
-            for (int c = 0; c < image.NumberOfChannels(); c++)
-                SuperFlatThread<FloatPixelTraits>::dispatch(genSkyMask<FloatPixelTraits>, this, input, static_cast<Image&>(*conv), c);
-        } else if (image.BitsPerSample() == 64) {
-            ReferenceArray<GenericImage<DoublePixelTraits>> input;
-            input << &static_cast<DImage&>(*ref);
-            for (int c = 0; c < image.NumberOfChannels(); c++)
-                SuperFlatThread<DoublePixelTraits>::dispatch(genSkyMask<DoublePixelTraits>, this, input, static_cast<DImage&>(*conv), c);
-        }
-        mask.Multiply(conv);
+    MorphologicalTransformation sf;
+    sf.SetStructure(CircularStructure(25));
+    sf.SetOperator(SelectionFilter(0.9f));
+    for (int i = 0; i < objectDiffusionDistance; i++) {
+        sf >> mask;
         image.Status() += 1;
     }
+    if (image.BitsPerSample() == 32) {
+        ReferenceArray<GenericImage<FloatPixelTraits>> input;
+        input << &static_cast<Image&>(*ref);
+        for (int c = 0; c < image.NumberOfChannels(); c++)
+            SuperFlatThread<FloatPixelTraits>::dispatch(genSkyMask<FloatPixelTraits>, this, input, static_cast<Image&>(*mask), c);
+    } else if (image.BitsPerSample() == 64) {
+        ReferenceArray<GenericImage<DoublePixelTraits>> input;
+        input << &static_cast<DImage&>(*ref);
+        for (int c = 0; c < image.NumberOfChannels(); c++)
+            SuperFlatThread<DoublePixelTraits>::dispatch(genSkyMask<DoublePixelTraits>, this, input, static_cast<DImage&>(*mask), c);
+    }
+    image.Status() += 1;
 
     // Step 4: Remove noise using 3x3 median filter, add star mask
     mf >> mask;
@@ -269,7 +263,6 @@ bool SuperFlatInstance::ExecuteOn(View& view)
     flat0.EnsureUniqueImage();
     flat0.SetStatusCallback(nullptr);
     image.Status() += 1;
-    image.Status().SetRefreshRate();
     if (image.BitsPerSample() == 32) {
         ReferenceArray<GenericImage<FloatPixelTraits>> input;
         input << &static_cast<Image&>(*flat0);
