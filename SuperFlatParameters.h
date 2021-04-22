@@ -72,7 +72,31 @@ public:
     bool DefaultValue() const override;
 };
 
-extern SFGenerateSkyMask* TheSFGenerateSkyMask;
+extern SFGenerateSkyMask* TheSFGenerateSkyMaskParameter;
+
+class SFTestSkyDetection : public MetaBoolean
+{
+public:
+    SFTestSkyDetection(MetaProcess*);
+
+    IsoString Id() const override;
+    bool DefaultValue() const override;
+};
+
+extern SFTestSkyDetection* TheSFTestSkyDetectionParameter;
+
+class SFDownsample : public MetaUInt32
+{
+public:
+    SFDownsample(MetaProcess*);
+
+    IsoString Id() const override;
+    double DefaultValue() const override;
+    double MinimumValue() const override;
+    double MaximumValue() const override;
+};
+
+extern SFDownsample* TheSFDownsampleParameter;
 
 PCL_END_LOCAL
 

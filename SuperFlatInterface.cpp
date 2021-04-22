@@ -102,7 +102,9 @@ void SuperFlatInterface::UpdateControls()
 	GUI->ObjectDiffusionDistance_NumericControl.SetValue(instance.objectDiffusionDistance);
 	GUI->NonSkyMaskView_Edit.SetText(NONSKY_MASK_ID);
 	GUI->Smoothness_NumericControl.SetValue(instance.smoothness);
+	GUI->Downsample_SpinBox.SetValue(instance.downsample);
 	GUI->GenerateSkyMask_CheckBox.SetChecked(instance.generateSkyMask);
+	GUI->TestSkyDetection_CheckBox.SetChecked(instance.testSkyDetection);
 }
 
 void SuperFlatInterface::__GetFocus(Control& sender)
@@ -154,6 +156,12 @@ void SuperFlatInterface::__EditValueUpdated(NumericEdit& sender, double value)
 		instance.smoothness = value;
 }
 
+void SuperFlatInterface::__SpinBoxValueUpdated(SpinBox& sender, int value)
+{
+	if (sender == GUI->Downsample_SpinBox)
+		instance.downsample = value;
+}
+
 void SuperFlatInterface::__Click(Button& sender, bool checked)
 {
 	if (sender == GUI->NonSkyMaskView_ToolButton) {
@@ -165,6 +173,8 @@ void SuperFlatInterface::__Click(Button& sender, bool checked)
 		}
 	} else if (sender == GUI->GenerateSkyMask_CheckBox) {
 		instance.generateSkyMask = checked;
+	} else if (sender == GUI->TestSkyDetection_CheckBox) {
+		instance.testSkyDetection = checked;
 	}
 }
 
@@ -267,6 +277,16 @@ SuperFlatInterface::GUIData::GUIData(SuperFlatInterface& w)
 	Smoothness_Sizer.Add(Smoothness_NumericControl);
 	Smoothness_Sizer.AddStretch();
 
+	Downsample_Label.SetText("Downsample");
+	Downsample_Label.SetFixedWidth(labelWidth1);
+	Downsample_Label.SetTextAlignment(TextAlign::Right | TextAlign::VertCenter);
+	Downsample_SpinBox.SetRange(TheSFDownsampleParameter->MinimumValue(), int(TheSFDownsampleParameter->MaximumValue()));
+	Downsample_SpinBox.OnValueUpdated((SpinBox::value_event_handler) & SuperFlatInterface::__SpinBoxValueUpdated, w);
+	Downsample_Sizer.SetSpacing(4);
+	Downsample_Sizer.Add(Downsample_Label);
+	Downsample_Sizer.Add(Downsample_SpinBox);
+	Downsample_Sizer.AddStretch();
+
 	GenerateSkyMask_CheckBox.SetText("Generate sky mask");
 	GenerateSkyMask_CheckBox.SetToolTip("<p>If selected, a new image window with a sky mask will be created.</p>");
 	GenerateSkyMask_CheckBox.OnClick((Button::click_event_handler) & SuperFlatInterface::__Click, w);
@@ -274,14 +294,23 @@ SuperFlatInterface::GUIData::GUIData(SuperFlatInterface& w)
 	GenerateSkyMask_Sizer.Add(GenerateSkyMask_CheckBox);
 	GenerateSkyMask_Sizer.AddStretch();
 
+	TestSkyDetection_CheckBox.SetText("Test sky detection");
+	TestSkyDetection_CheckBox.SetToolTip("<p>If selected, only sky detection will be shown as the result. Inpainting will be skipped.</p>");
+	TestSkyDetection_CheckBox.OnClick((Button::click_event_handler) & SuperFlatInterface::__Click, w);
+	TestSkyDetection_Sizer.AddUnscaledSpacing(labelWidth1 + ui4);
+	TestSkyDetection_Sizer.Add(TestSkyDetection_CheckBox);
+	TestSkyDetection_Sizer.AddStretch();
+
 	Global_Sizer.SetMargin(8);
 	Global_Sizer.SetSpacing(4);
 	Global_Sizer.Add(SkyDetectionThreshold_Sizer);
 	Global_Sizer.Add(StarDetectionSensitivity_Sizer);
 	Global_Sizer.Add(ObjectDiffusionDistance_Sizer);
 	Global_Sizer.Add(NonSkyMaskView_Sizer);
-	Global_Sizer.Add(Smoothness_NumericControl);
+	Global_Sizer.Add(Smoothness_Sizer);
+	Global_Sizer.Add(Downsample_Sizer);
 	Global_Sizer.Add(GenerateSkyMask_Sizer);
+	Global_Sizer.Add(TestSkyDetection_Sizer);
 
 	w.SetSizer(Global_Sizer);
 

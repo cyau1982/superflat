@@ -2,6 +2,7 @@
 #include <pcl/AutoViewLock.h>
 #include <pcl/Console.h>
 #include <pcl/FFTConvolution.h>
+#include <pcl/IntegerResample.h>
 #include <pcl/MorphologicalTransformation.h>
 #include <pcl/MultiscaleLinearTransform.h>
 #include <pcl/PixelInterpolation.h>
@@ -94,8 +95,11 @@ SuperFlatInstance::SuperFlatInstance(const MetaProcess* m)
     , skyDetectionThreshold(TheSFSkyDetectionThresholdParameter->DefaultValue())
     , starDetectionSensitivity(TheSFStarDetectionSensitivityParameter->DefaultValue())
     , objectDiffusionDistance(TheSFObjectDiffusionDistanceParameter->DefaultValue())
+    , nonSkyMaskViewId()
     , smoothness(TheSFSmoothnessParameter->DefaultValue())
-    , generateSkyMask(TheSFGenerateSkyMask->DefaultValue())
+    , downsample(TheSFDownsampleParameter->DefaultValue())
+    , generateSkyMask(TheSFGenerateSkyMaskParameter->DefaultValue())
+    , testSkyDetection(TheSFTestSkyDetectionParameter->DefaultValue())
 {
 }
 
@@ -157,9 +161,19 @@ bool SuperFlatInstance::ExecuteOn(View& view)
 
     image.SetStatusCallback(&status);
 
+    // Downsample
+    ImageVariant downImage;
+    downImage.CopyImage(image);
+    downImage.EnsureUniqueImage();
+    downImage.SetStatusCallback(nullptr);
+    if (downsample > 1) {
+        IntegerResample ir(-downsample);
+        ir >> downImage;
+    }
+
     // Step 1: Star detection
     ImageVariant starMask;
-    starMask.CopyImage(image);
+    starMask.CopyImage(downImage);
     starMask.EnsureUniqueImage();
     starMask.SetStatusCallback(nullptr);
     image.Status().Initialize("Performing star detection", 3);
@@ -188,7 +202,7 @@ bool SuperFlatInstance::ExecuteOn(View& view)
 
     // Step 2: Convolution
     ImageVariant ref;
-    ref.CopyImage(image);
+    ref.CopyImage(downImage);
     ref.EnsureUniqueImage();
     ref.SetStatusCallback(nullptr);
     image.Status().Initialize("Creating sky mask", objectDiffusionDistance + 3);
@@ -198,9 +212,10 @@ bool SuperFlatInstance::ExecuteOn(View& view)
 
     // Step 3: Create sky mask
     ImageVariant mask;
-    mask.CopyImage(image);
+    mask.CopyImage(downImage);
     mask.EnsureUniqueImage();
     mask.SetStatusCallback(nullptr);
+    mf >> mask;
     MorphologicalTransformation sf;
     sf.SetStructure(CircularStructure(25));
     sf.SetOperator(SelectionFilter(0.9f));
@@ -237,52 +252,62 @@ bool SuperFlatInstance::ExecuteOn(View& view)
         {
             AutoViewLock viewLock(nonSkyMaskView);
             nonSkyMask.CopyImage(nonSkyMaskView.Image());
+            nonSkyMask.EnsureUniqueImage();
+            nonSkyMask.SetStatusCallback(nullptr);
         }
+        if ((nonSkyMask.Width() != mask.Width()) || (nonSkyMask.Height() != mask.Height())) {
+            BicubicFilterPixelInterpolation bs(2, 2, CubicBSplineFilter());
+            Resample rs(bs, double(mask.Width()) / nonSkyMask.Width(), double(mask.Height()) / nonSkyMask.Height());
+            rs >> nonSkyMask;
+        }
+        if ((nonSkyMask.NumberOfChannels() != mask.NumberOfChannels()) && (nonSkyMask.ColorSpace() == ColorSpace::Gray))
+            nonSkyMask.SetColorSpace(mask.ColorSpace());
 
-        if ((nonSkyMaskView.Width() != view.Width()) || (nonSkyMaskView.Height() != view.Height()) || (nonSkyMask.NumberOfChannels() != image.NumberOfChannels()))
-            throw Error("Non-sky mask must match the same format (width, height, channel) of the image beging processed.");
+        if (nonSkyMask.NumberOfChannels() != mask.NumberOfChannels())
+            throw Error("Number of channels of non-sky mask mismatch with the image being processed.");
 
-        nonSkyMask.SetStatusCallback(nullptr);
         nonSkyMask.Binarize(0.5);
         mask.Multiply(nonSkyMask.Invert());
     }
 
     // Step 6: Extract sky as flat
     ImageVariant flat;
-    flat.CopyImage(image);
+    flat.CopyImage(downImage);
     flat.EnsureUniqueImage();
     flat.SetStatusCallback(nullptr);
     flat.Multiply(mask);
     image.Status() += 1;
     image.Status().Complete();
 
-    // Step 7: Inpaint
-    image.Status().Initialize("Inpainting", image.NumberOfChannels() + 1);
-    ImageVariant flat0;
-    flat0.CopyImage(flat);
-    flat0.EnsureUniqueImage();
-    flat0.SetStatusCallback(nullptr);
-    image.Status() += 1;
-    if (image.BitsPerSample() == 32) {
-        ReferenceArray<GenericImage<FloatPixelTraits>> input;
-        input << &static_cast<Image&>(*flat0);
-        for (int c = 0; c < image.NumberOfChannels(); c++) {
-            SuperFlatThread<FloatPixelTraits>::dispatch(inpaint<FloatPixelTraits>, this, input, static_cast<Image&>(*flat), c);
-            image.Status() += 1;
+    if (!testSkyDetection) {
+        // Step 7: Inpaint
+        image.Status().Initialize("Inpainting", image.NumberOfChannels() + 1);
+        ImageVariant flat0;
+        flat0.CopyImage(flat);
+        flat0.EnsureUniqueImage();
+        flat0.SetStatusCallback(nullptr);
+        image.Status() += 1;
+        if (image.BitsPerSample() == 32) {
+            ReferenceArray<GenericImage<FloatPixelTraits>> input;
+            input << &static_cast<Image&>(*flat0);
+            for (int c = 0; c < image.NumberOfChannels(); c++) {
+                SuperFlatThread<FloatPixelTraits>::dispatch(inpaint<FloatPixelTraits>, this, input, static_cast<Image&>(*flat), c);
+                image.Status() += 1;
+            }
+        } else if (image.BitsPerSample() == 64) {
+            ReferenceArray<GenericImage<DoublePixelTraits>> input;
+            input << &static_cast<DImage&>(*flat0);
+            for (int c = 0; c < image.NumberOfChannels(); c++) {
+                SuperFlatThread<DoublePixelTraits>::dispatch(inpaint<DoublePixelTraits>, this, input, static_cast<DImage&>(*flat), c);
+                image.Status() += 1;
+            }
         }
-    } else if (image.BitsPerSample() == 64) {
-        ReferenceArray<GenericImage<DoublePixelTraits>> input;
-        input << &static_cast<DImage&>(*flat0);
-        for (int c = 0; c < image.NumberOfChannels(); c++) {
-            SuperFlatThread<DoublePixelTraits>::dispatch(inpaint<DoublePixelTraits>, this, input, static_cast<DImage&>(*flat), c);
-            image.Status() += 1;
-        }
-    }
-    image.Status().Complete();
+        image.Status().Complete();
 
-    // Step 8: Blur
-    VariableShapeFilter H2(pcl::Pow(1.7f, smoothness), 5.0f, 0.01f, 1.0f, 0.0f);
-    FFTConvolution(H2) >> flat;
+        // Step 8: Blur
+        VariableShapeFilter H2(pcl::Pow(1.7f, smoothness), 5.0f, 0.01f, 1.0f, 0.0f);
+        FFTConvolution(H2) >> flat;
+    }
 
     IsoString id = view.FullId() + "_flat";
     ImageWindow OutputWindow = ImageWindow(flat.Width(), flat.Height(), flat.NumberOfChannels(), flat.BitsPerSample(), true, flat.IsColor(), true, id);

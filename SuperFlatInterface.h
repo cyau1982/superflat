@@ -7,6 +7,7 @@
 #include <pcl/NumericControl.h>
 #include <pcl/ProcessInterface.h>
 #include <pcl/Sizer.h>
+#include <pcl/SpinBox.h>
 #include <pcl/ToolButton.h>
 
 #include "SuperFlatInstance.h"
@@ -51,8 +52,13 @@ private:
                 ToolButton      NonSkyMaskView_ToolButton;
             HorizontalSizer Smoothness_Sizer;
                 NumericControl  Smoothness_NumericControl;
+            HorizontalSizer   Downsample_Sizer;
+                Label             Downsample_Label;
+                SpinBox           Downsample_SpinBox;
             HorizontalSizer GenerateSkyMask_Sizer;
                 CheckBox        GenerateSkyMask_CheckBox;
+            HorizontalSizer TestSkyDetection_Sizer;
+                CheckBox        TestSkyDetection_CheckBox;
     };
 
     GUIData* GUI = nullptr;
@@ -61,6 +67,7 @@ private:
     void __GetFocus(Control& sender);
     void __EditCompleted(Edit& sender);
     void __EditValueUpdated(NumericEdit& sender, double value);
+    void __SpinBoxValueUpdated(SpinBox& sender, int value);
     void __Click(Button& sender, bool checked);
     void __ViewDrag(Control& sender, const Point& pos, const View& view, unsigned modifiers, bool& wantsView);
     void __ViewDrop(Control& sender, const Point& pos, const View& view, unsigned modifiers);

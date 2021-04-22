@@ -22,7 +22,9 @@ SuperFlatProcess::SuperFlatProcess()
     new SFStarDetectionSensitivity(this);
     new SFObjectDiffusionDistance(this);
     new SFSmoothness(this);
+    new SFDownsample(this);
     new SFGenerateSkyMask(this);
+    new SFTestSkyDetection(this);
 }
 
 IsoString SuperFlatProcess::Id() const

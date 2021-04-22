@@ -26,7 +26,9 @@ private:
     int objectDiffusionDistance;
     String nonSkyMaskViewId;
     float smoothness;
+    int downsample;
     bool generateSkyMask;
+    bool testSkyDetection;
 
     template <class P>
     static void genSkyMask(SuperFlatInstance* superFlat, ReferenceArray<GenericImage<P>>& ref, GenericImage<P>& maskImage, int y, int channel);

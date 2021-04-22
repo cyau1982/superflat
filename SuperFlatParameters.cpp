@@ -7,7 +7,9 @@ SFSkyDetectionThreshold* TheSFSkyDetectionThresholdParameter = nullptr;
 SFStarDetectionSensitivity* TheSFStarDetectionSensitivityParameter = nullptr;
 SFObjectDiffusionDistance* TheSFObjectDiffusionDistanceParameter = nullptr;
 SFSmoothness* TheSFSmoothnessParameter = nullptr;
-SFGenerateSkyMask* TheSFGenerateSkyMask = nullptr;
+SFGenerateSkyMask* TheSFGenerateSkyMaskParameter = nullptr;
+SFTestSkyDetection* TheSFTestSkyDetectionParameter = nullptr;
+SFDownsample* TheSFDownsampleParameter = nullptr;
 
 SFSkyDetectionThreshold::SFSkyDetectionThreshold(MetaProcess* P) : MetaFloat(P)
 {
@@ -126,7 +128,7 @@ double SFSmoothness::DefaultValue() const
 
 SFGenerateSkyMask::SFGenerateSkyMask(MetaProcess* P) : MetaBoolean(P)
 {
-    TheSFGenerateSkyMask = this;
+    TheSFGenerateSkyMaskParameter = this;
 }
 
 IsoString SFGenerateSkyMask::Id() const
@@ -137,6 +139,46 @@ IsoString SFGenerateSkyMask::Id() const
 bool SFGenerateSkyMask::DefaultValue() const
 {
     return false;
+}
+
+SFTestSkyDetection::SFTestSkyDetection(MetaProcess* P) : MetaBoolean(P)
+{
+    TheSFTestSkyDetectionParameter = this;
+}
+
+IsoString SFTestSkyDetection::Id() const
+{
+    return "testSkyDetection";
+}
+
+bool SFTestSkyDetection::DefaultValue() const
+{
+    return false;
+}
+
+SFDownsample::SFDownsample(MetaProcess* P) : MetaUInt32(P)
+{
+    TheSFDownsampleParameter = this;
+}
+
+IsoString SFDownsample::Id() const
+{
+    return "downsample";
+}
+
+double SFDownsample::DefaultValue() const
+{
+    return 2;
+}
+
+double SFDownsample::MinimumValue() const
+{
+    return 1;
+}
+
+double SFDownsample::MaximumValue() const
+{
+    return 16;
 }
 
 }	// namespace pcl
